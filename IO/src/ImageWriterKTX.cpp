@@ -1,54 +1,19 @@
-/* FasTC
- * Copyright (c) 2014 University of North Carolina at Chapel Hill.
- * All rights reserved.
- *
- * Permission to use, copy, modify, and distribute this software and its
- * documentation for educational, research, and non-profit purposes, without
- * fee, and without a written agreement is hereby granted, provided that the
- * above copyright notice, this paragraph, and the following four paragraphs
- * appear in all copies.
- *
- * Permission to incorporate this software into commercial products may be
- * obtained by contacting the authors or the Office of Technology Development
- * at the University of North Carolina at Chapel Hill <otd@unc.edu>.
- *
- * This software program and documentation are copyrighted by the University of
- * North Carolina at Chapel Hill. The software program and documentation are
- * supplied "as is," without any accompanying services from the University of
- * North Carolina at Chapel Hill or the authors. The University of North
- * Carolina at Chapel Hill and the authors do not warrant that the operation of
- * the program will be uninterrupted or error-free. The end-user understands
- * that the program was developed for research purposes and is advised not to
- * rely exclusively on the program for any reason.
- *
- * IN NO EVENT SHALL THE UNIVERSITY OF NORTH CAROLINA AT CHAPEL HILL OR THE
- * AUTHORS BE LIABLE TO ANY PARTY FOR DIRECT, INDIRECT, SPECIAL, INCIDENTAL,
- * OR CONSEQUENTIAL DAMAGES, INCLUDING LOST PROFITS, ARISING OUT OF THE USE OF
- * THIS SOFTWARE AND ITS DOCUMENTATION, EVEN IF THE UNIVERSITY OF NORTH CAROLINA
- * AT CHAPEL HILL OR THE AUTHORS HAVE BEEN ADVISED OF THE POSSIBILITY OF SUCH
- * DAMAGE.
- *
- * THE UNIVERSITY OF NORTH CAROLINA AT CHAPEL HILL AND THE AUTHORS SPECIFICALLY
- * DISCLAIM ANY WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
- * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE AND ANY 
- * STATUTORY WARRANTY OF NON-INFRINGEMENT. THE SOFTWARE PROVIDED HEREUNDER IS ON
- * AN "AS IS" BASIS, AND THE UNIVERSITY  OF NORTH CAROLINA AT CHAPEL HILL AND
- * THE AUTHORS HAVE NO OBLIGATIONS TO PROVIDE MAINTENANCE, SUPPORT, UPDATES, 
- * ENHANCEMENTS, OR MODIFICATIONS.
- *
- * Please send all BUG REPORTS to <pavel@cs.unc.edu>.
- *
- * The authors may be contacted via:
- *
- * Pavel Krajcevski
- * Dept of Computer Science
- * 201 S Columbia St
- * Frederick P. Brooks, Jr. Computer Science Bldg
- * Chapel Hill, NC 27599-3175
- * USA
- * 
- * <http://gamma.cs.unc.edu/FasTC/>
- */
+// Copyright 2016 The University of North Carolina at Chapel Hill
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//    http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+// Please send all BUG REPORTS to <pavel@cs.unc.edu>.
+// <http://gamma.cs.unc.edu/FasTC/>
 
 #include "ImageWriterKTX.h"
 
@@ -86,7 +51,7 @@ class ByteWriter {
       m_BufferSz <<= 1;
       uint8 *newBuffer = new uint8[m_BufferSz];
       memcpy(newBuffer, m_Base, m_BytesWritten);
-      delete m_Base;
+      delete [] m_Base;
       m_Base = newBuffer;
       m_Head = m_Base + m_BytesWritten;
     }
@@ -132,12 +97,24 @@ bool ImageWriterKTX::WriteImage() {
       break;
 
     case FasTC::eCompressionFormat_PVRTC4:
-      wtr.Write(COMPRESSED_RGBA_PVRTC_4BPPV1_IMG);  // glInternalFormat
+      wtr.Write(GL_COMPRESSED_RGBA_PVRTC_4BPPV1_IMG);  // glInternalFormat
+      wtr.Write(GL_RGBA);  // glBaseFormat
+      break;
+
+    case FasTC::eCompressionFormat_DXT1:
+      wtr.Write(GL_COMPRESSED_RGB_S3TC_DXT1_EXT);  // glInternalFormat
+      wtr.Write(GL_RGB);  // glBaseFormat
+      break;
+
+    case FasTC::eCompressionFormat_DXT5:
+      wtr.Write(GL_COMPRESSED_RGBA_S3TC_DXT5_EXT);  // glInternalFormat
       wtr.Write(GL_RGBA);  // glBaseFormat
       break;
 
     default:
       fprintf(stderr, "Unsupported KTX compressed format: %d\n", ci->GetFormat());
+      m_RawFileData = wtr.GetBytes();
+      m_RawFileDataSz = wtr.GetBytesWritten();
       return false;
     }
   } else {
@@ -160,11 +137,15 @@ bool ImageWriterKTX::WriteImage() {
   wtr.Write(orientationValue, oValLen + 1); // value
   wtr.Write(orientationKey, tkvSz - kvSz - 4); // padding
 
-  if(ci && ci->GetFormat() == FasTC::eCompressionFormat_BPTC) {
+  if(ci &&
+     (ci->GetFormat() == FasTC::eCompressionFormat_BPTC ||
+      ci->GetFormat() == FasTC::eCompressionFormat_DXT5)) {
     static const uint32 kImageSize = m_Width * m_Height;
     wtr.Write(kImageSize); // imageSize
     wtr.Write(ci->GetCompressedData(), kImageSize); // imagedata...
-  } else if(ci && ci->GetFormat() == FasTC::eCompressionFormat_PVRTC4) {
+  } else if(ci &&
+            (ci->GetFormat() == FasTC::eCompressionFormat_PVRTC4 ||
+             ci->GetFormat() == FasTC::eCompressionFormat_DXT1)) {
     static const uint32 kImageSize = m_Width * m_Height >> 1;
     wtr.Write(kImageSize); // imageSize
     wtr.Write(ci->GetCompressedData(), kImageSize); // imagedata...

@@ -1,54 +1,19 @@
-/* FasTC
- * Copyright (c) 2013 University of North Carolina at Chapel Hill.
- * All rights reserved.
- *
- * Permission to use, copy, modify, and distribute this software and its
- * documentation for educational, research, and non-profit purposes, without
- * fee, and without a written agreement is hereby granted, provided that the
- * above copyright notice, this paragraph, and the following four paragraphs
- * appear in all copies.
- *
- * Permission to incorporate this software into commercial products may be
- * obtained by contacting the authors or the Office of Technology Development
- * at the University of North Carolina at Chapel Hill <otd@unc.edu>.
- *
- * This software program and documentation are copyrighted by the University of
- * North Carolina at Chapel Hill. The software program and documentation are
- * supplied "as is," without any accompanying services from the University of
- * North Carolina at Chapel Hill or the authors. The University of North
- * Carolina at Chapel Hill and the authors do not warrant that the operation of
- * the program will be uninterrupted or error-free. The end-user understands
- * that the program was developed for research purposes and is advised not to
- * rely exclusively on the program for any reason.
- *
- * IN NO EVENT SHALL THE UNIVERSITY OF NORTH CAROLINA AT CHAPEL HILL OR THE
- * AUTHORS BE LIABLE TO ANY PARTY FOR DIRECT, INDIRECT, SPECIAL, INCIDENTAL,
- * OR CONSEQUENTIAL DAMAGES, INCLUDING LOST PROFITS, ARISING OUT OF THE USE OF
- * THIS SOFTWARE AND ITS DOCUMENTATION, EVEN IF THE UNIVERSITY OF NORTH CAROLINA
- * AT CHAPEL HILL OR THE AUTHORS HAVE BEEN ADVISED OF THE POSSIBILITY OF SUCH
- * DAMAGE.
- *
- * THE UNIVERSITY OF NORTH CAROLINA AT CHAPEL HILL AND THE AUTHORS SPECIFICALLY
- * DISCLAIM ANY WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
- * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE AND ANY 
- * STATUTORY WARRANTY OF NON-INFRINGEMENT. THE SOFTWARE PROVIDED HEREUNDER IS ON
- * AN "AS IS" BASIS, AND THE UNIVERSITY  OF NORTH CAROLINA AT CHAPEL HILL AND
- * THE AUTHORS HAVE NO OBLIGATIONS TO PROVIDE MAINTENANCE, SUPPORT, UPDATES, 
- * ENHANCEMENTS, OR MODIFICATIONS.
- *
- * Please send all BUG REPORTS to <pavel@cs.unc.edu>.
- *
- * The authors may be contacted via:
- *
- * Pavel Krajcevski
- * Dept of Computer Science
- * 201 S Columbia St
- * Frederick P. Brooks, Jr. Computer Science Bldg
- * Chapel Hill, NC 27599-3175
- * USA
- * 
- * <http://gamma.cs.unc.edu/FasTC/>
- */
+// Copyright 2016 The University of North Carolina at Chapel Hill
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//    http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+// Please send all BUG REPORTS to <pavel@cs.unc.edu>.
+// <http://gamma.cs.unc.edu/FasTC/>
 
 #include "FasTC/PVRTCCompressor.h"
 
@@ -68,7 +33,10 @@
 #include "Block.h"
 #include "Indexer.h"
 
-#define USE_CONSTANT_LUTS
+// !FIXME! Figure out why the PSNR of these LUTs is worse than when
+// we don't use them -- they should be optimal. This is reflected
+// in Github issue #19
+// #define USE_CONSTANT_LUTS
 
 namespace PVRTCC {
 
@@ -459,7 +427,7 @@ namespace PVRTCC {
         neighbors[2] = &(labels[idxr(i+1, j+1)]);
 
         // Add bottom label
-	neighbors[3] = &(labels[idxr(i, j+1)]);
+        neighbors[3] = &(labels[idxr(i, j+1)]);
 
         // Add bottom left label
         neighbors[4] = &(labels[idxr(i-1, j+1)]);
@@ -506,6 +474,9 @@ namespace PVRTCC {
     for(uint32 j = 0; j < blocksH; j++) {
       for(uint32 i = 0; i < blocksW; i++) {
 
+        bool isHole[2][16];
+        memset(isHole, 0, sizeof(isHole));
+
         float minIntensity = 1.1f, maxIntensity = -0.1f;
         uint32 minIntensityIdx = 0, maxIntensityIdx = 0;
         for(uint32 y = j*4; y <= (j+1)*4; y++)
@@ -532,15 +503,13 @@ namespace PVRTCC {
           if(labels[idx].highLabel.distance > 0) {
             blockColors[0][localIdx] = CollectLabel(pixels, labels[idx].highLabel);
           } else {
-            // Mark the color as unused
-            blockColors[0][localIdx].A() = -1.0f;
+            isHole[0][localIdx] = true;
           }
 
           if(labels[idx].lowLabel.distance > 0) {
             blockColors[1][localIdx] = CollectLabel(pixels, labels[idx].lowLabel);
           } else {
-            // Mark the color as unused
-            blockColors[1][localIdx].A() = -1.0f;
+            isHole[1][localIdx] = true;
           }
         }
 
@@ -550,7 +519,16 @@ namespace PVRTCC {
           // Assume all same color
           FasTC::Pixel color(pixels[minIntensityIdx]);
           if(color.A() < 0xFF) {
-            assert(!"Implement me!");
+            if (color.A() == 0) {
+              color.Unpack(0);    // Set to total black
+              b.SetColorA(color);
+              b.SetColorB(color);
+            } else {
+              // !FIXME! Actually compute better lookup tables for
+              // this case...
+              b.SetColorA(color, color.A() < 200);
+              b.SetColorB(color, color.A() < 200);
+            }
           } else {
             FasTC::Pixel high, low;
             high.A() = low.A() = 0xFF;
@@ -571,18 +549,18 @@ namespace PVRTCC {
 #endif
           // Average all of the values together now...
           FasTC::Color high, low;
-	  Indexer localIdxr(4, 4);
+          Indexer localIdxr(4, 4);
           for(uint32 y = 0; y < localIdxr.GetHeight(); y++)
-	  for(uint32 x = 0; x < localIdxr.GetWidth(); x++) {
+          for(uint32 x = 0; x < localIdxr.GetWidth(); x++) {
             uint32 idx = localIdxr(x, y);
             FasTC::Color c = blockColors[0][idx];
-            if(c.A() < 0.0f) {
+            if(isHole[0][idx]) {
               c.Unpack(pixels[maxIntensityIdx]);
             }
             high += c * (1.0f / 16.0f);
 
             c = blockColors[1][idx];
-            if(c.A() < 0.0f) {
+            if(isHole[1][idx]) {
               c.Unpack(pixels[minIntensityIdx]);
             }
             low += c * (1.0f / 16.0f);
@@ -591,10 +569,10 @@ namespace PVRTCC {
           // Store them as our endpoints for this block...
           FasTC::Pixel p;
           p.Unpack(high.Pack());
-          b.SetColorA(p);
+          b.SetColorA(p, p.A() < 200);
 
           p.Unpack(low.Pack());
-          b.SetColorB(p);
+          b.SetColorB(p, p.B() < 200);
 #ifdef USE_CONSTANT_LUTS
         }
 #endif
@@ -739,6 +717,7 @@ namespace PVRTCC {
                 int32 o = original.Component(c);
                 errorVec[c] = r - o;
               }
+
               uint32 error = static_cast<uint64>(errorVec.LengthSq());
 
               if(error < bestError) {

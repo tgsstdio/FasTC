@@ -1,54 +1,19 @@
-/* FasTC
- * Copyright (c) 2014 University of North Carolina at Chapel Hill.
- * All rights reserved.
- *
- * Permission to use, copy, modify, and distribute this software and its
- * documentation for educational, research, and non-profit purposes, without
- * fee, and without a written agreement is hereby granted, provided that the
- * above copyright notice, this paragraph, and the following four paragraphs
- * appear in all copies.
- *
- * Permission to incorporate this software into commercial products may be
- * obtained by contacting the authors or the Office of Technology Development
- * at the University of North Carolina at Chapel Hill <otd@unc.edu>.
- *
- * This software program and documentation are copyrighted by the University of
- * North Carolina at Chapel Hill. The software program and documentation are
- * supplied "as is," without any accompanying services from the University of
- * North Carolina at Chapel Hill or the authors. The University of North
- * Carolina at Chapel Hill and the authors do not warrant that the operation of
- * the program will be uninterrupted or error-free. The end-user understands
- * that the program was developed for research purposes and is advised not to
- * rely exclusively on the program for any reason.
- *
- * IN NO EVENT SHALL THE UNIVERSITY OF NORTH CAROLINA AT CHAPEL HILL OR THE
- * AUTHORS BE LIABLE TO ANY PARTY FOR DIRECT, INDIRECT, SPECIAL, INCIDENTAL,
- * OR CONSEQUENTIAL DAMAGES, INCLUDING LOST PROFITS, ARISING OUT OF THE USE OF
- * THIS SOFTWARE AND ITS DOCUMENTATION, EVEN IF THE UNIVERSITY OF NORTH CAROLINA
- * AT CHAPEL HILL OR THE AUTHORS HAVE BEEN ADVISED OF THE POSSIBILITY OF SUCH
- * DAMAGE.
- *
- * THE UNIVERSITY OF NORTH CAROLINA AT CHAPEL HILL AND THE AUTHORS SPECIFICALLY
- * DISCLAIM ANY WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
- * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE AND ANY 
- * STATUTORY WARRANTY OF NON-INFRINGEMENT. THE SOFTWARE PROVIDED HEREUNDER IS ON
- * AN "AS IS" BASIS, AND THE UNIVERSITY  OF NORTH CAROLINA AT CHAPEL HILL AND
- * THE AUTHORS HAVE NO OBLIGATIONS TO PROVIDE MAINTENANCE, SUPPORT, UPDATES, 
- * ENHANCEMENTS, OR MODIFICATIONS.
- *
- * Please send all BUG REPORTS to <pavel@cs.unc.edu>.
- *
- * The authors may be contacted via:
- *
- * Pavel Krajcevski
- * Dept of Computer Science
- * 201 S Columbia St
- * Frederick P. Brooks, Jr. Computer Science Bldg
- * Chapel Hill, NC 27599-3175
- * USA
- * 
- * <http://gamma.cs.unc.edu/FasTC/>
- */
+// Copyright 2016 The University of North Carolina at Chapel Hill
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//    http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+// Please send all BUG REPORTS to <pavel@cs.unc.edu>.
+// <http://gamma.cs.unc.edu/FasTC/>
 
 #include "FasTC/ASTCCompressor.h"
 
@@ -76,7 +41,8 @@ namespace ASTCC {
     bool m_bDualPlane;
     uint32 m_MaxWeight;
     bool m_bError;
-    bool m_bVoidExtent;
+    bool m_bVoidExtentLDR;
+    bool m_bVoidExtentHDR;
 
     TexelWeightParams() {
       memset(this, 0, sizeof(*this));
@@ -109,7 +75,17 @@ namespace ASTCC {
 
     // Does this match the void extent block mode?
     if((modeBits & 0x01FF) == 0x1FC) {
-      params.m_bVoidExtent = true;
+      if (modeBits & 0x200) {
+        params.m_bVoidExtentHDR = true;
+      } else {
+        params.m_bVoidExtentLDR = true;
+      }
+
+      // Next two bits must be one.
+      if (!(modeBits & 0x400) || !strm.ReadBit()) {
+        params.m_bError = true;
+      }
+
       return params;
     }
 
@@ -289,6 +265,28 @@ namespace ASTCC {
     params.m_bDualPlane = D;
 
     return params;
+  }
+
+  void FillVoidExtentLDR(BitStreamReadOnly& strm, uint32* const outBuf,
+    uint32 blockWidth, uint32 blockHeight) {
+    // Don't actually care about the void extent, just read the bits...
+    for (int i = 0; i < 4; ++i) {
+      strm.ReadBits(13);
+    }
+
+    // Decode the RGBA components and renormalize them to the range [0, 255]
+    uint16 r = strm.ReadBits(16);
+    uint16 g = strm.ReadBits(16);
+    uint16 b = strm.ReadBits(16);
+    uint16 a = strm.ReadBits(16);
+
+    uint32 rgba = (r >> 8) | (g & 0xFF00) | (static_cast<uint32>(b) & 0xFF00) << 8
+      | (static_cast<uint32>(a) & 0xFF00) << 16;
+
+    for (uint32 j = 0; j < blockHeight; j++)
+    for (uint32 i = 0; i < blockWidth; i++) {
+      outBuf[j * blockWidth + i] = rgba;
+    }
   }
 
   void FillError(uint32 *outBuf, uint32 blockWidth, uint32 blockHeight) {
@@ -793,6 +791,17 @@ namespace ASTCC {
       return;
     }
 
+    if (weightParams.m_bVoidExtentLDR) {
+      FillVoidExtentLDR(strm, outBuf, blockWidth, blockHeight);
+      return;
+    }
+
+    if (weightParams.m_bVoidExtentHDR) {
+      assert(!"HDR void extent blocks are unsupported!");
+      FillError(outBuf, blockWidth, blockHeight);
+      return;
+    }
+
     if(weightParams.m_Width > blockWidth) {
       assert(!"Texel weight grid width should be smaller than block width");
       FillError(outBuf, blockWidth, blockHeight);
@@ -820,7 +829,7 @@ namespace ASTCC {
 
     // Determine partitions, partition index, and color endpoint modes
     int32 planeIdx = -1;
-    uint32 partitionIndex = nPartitions;
+    uint32 partitionIndex;
     uint32 colorEndpointMode[4] = {0, 0, 0, 0};
  
     // Define color data.
@@ -1005,9 +1014,12 @@ namespace ASTCC {
         uint32 uncompData[144];
         DecompressBlock(blockPtr, blockWidth, blockHeight, uncompData);
 
+        uint32 decompWidth = std::min(blockWidth, dcj.Width() - i);
+        uint32 decompHeight = std::min(blockHeight, dcj.Height() - j);
+
         uint8 *outRow = dcj.OutBuf() + (j*dcj.Width() + i)*4;
-        for(uint32 jj = 0; jj < blockHeight; jj++) {
-          memcpy(outRow + jj*dcj.Width()*4, uncompData + jj*blockWidth, blockWidth*4);
+        for(uint32 jj = 0; jj < decompHeight; jj++) {
+          memcpy(outRow + jj*dcj.Width()*4, uncompData + jj*blockWidth, decompWidth*4);
         }
 
         blockIdx++;

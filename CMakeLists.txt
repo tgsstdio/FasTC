@@ -1,55 +1,21 @@
-# FasTC
-# Copyright (c) 2014 University of North Carolina at Chapel Hill.
-# All rights reserved.
+# Copyright 2016 The University of North Carolina at Chapel Hill
 #
-# Permission to use, copy, modify, and distribute this software and its
-# documentation for educational, research, and non-profit purposes, without
-# fee, and without a written agreement is hereby granted, provided that the
-# above copyright notice, this paragraph, and the following four paragraphs
-# appear in all copies.
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
 #
-# Permission to incorporate this software into commercial products may be
-# obtained by contacting the authors or the Office of Technology Development
-# at the University of North Carolina at Chapel Hill <otd@unc.edu>.
+#    http://www.apache.org/licenses/LICENSE-2.0
 #
-# This software program and documentation are copyrighted by the University of
-# North Carolina at Chapel Hill. The software program and documentation are
-# supplied "as is," without any accompanying services from the University of
-# North Carolina at Chapel Hill or the authors. The University of North
-# Carolina at Chapel Hill and the authors do not warrant that the operation of
-# the program will be uninterrupted or error-free. The end-user understands
-# that the program was developed for research purposes and is advised not to
-# rely exclusively on the program for any reason.
-#
-# IN NO EVENT SHALL THE UNIVERSITY OF NORTH CAROLINA AT CHAPEL HILL OR THE
-# AUTHORS BE LIABLE TO ANY PARTY FOR DIRECT, INDIRECT, SPECIAL, INCIDENTAL,
-# OR CONSEQUENTIAL DAMAGES, INCLUDING LOST PROFITS, ARISING OUT OF THE USE OF
-# THIS SOFTWARE AND ITS DOCUMENTATION, EVEN IF THE UNIVERSITY OF NORTH CAROLINA
-# AT CHAPEL HILL OR THE AUTHORS HAVE BEEN ADVISED OF THE POSSIBILITY OF SUCH
-# DAMAGE.
-#
-# THE UNIVERSITY OF NORTH CAROLINA AT CHAPEL HILL AND THE AUTHORS SPECIFICALLY
-# DISCLAIM ANY WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-# WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE AND ANY 
-# STATUTORY WARRANTY OF NON-INFRINGEMENT. THE SOFTWARE PROVIDED HEREUNDER IS ON
-# AN "AS IS" BASIS, AND THE UNIVERSITY  OF NORTH CAROLINA AT CHAPEL HILL AND
-# THE AUTHORS HAVE NO OBLIGATIONS TO PROVIDE MAINTENANCE, SUPPORT, UPDATES, 
-# ENHANCEMENTS, OR MODIFICATIONS.
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 #
 # Please send all BUG REPORTS to <pavel@cs.unc.edu>.
-#
-# The authors may be contacted via:
-#
-# Pavel Krajcevski
-# Dept of Computer Science
-# 201 S Columbia St
-# Frederick P. Brooks, Jr. Computer Science Bldg
-# Chapel Hill, NC 27599-3175
-# USA
-# 
 # <http://gamma.cs.unc.edu/FasTC/>
 
-CMAKE_MINIMUM_REQUIRED(VERSION 2.8 FATAL_ERROR)
+CMAKE_MINIMUM_REQUIRED(VERSION 3.1 FATAL_ERROR)
 PROJECT(FasTC CXX C)
 
 SET(FasTC_MAJOR_VERSION 0)
@@ -63,15 +29,17 @@ IF(MSVC)
 	SET(MSVC_INSTALL_PATH "${PROJECT_SOURCE_DIR}/Windows")
 	SET(CMAKE_PREFIX_PATH "${CMAKE_PREFIX_PATH};${MSVC_INSTALL_PATH}")
 
-	IF(MSVC10)
+	IF(${MSVC_VERSION} EQUAL 1600)
 		SET(MSVC_VERSION_STRING vc100)
-	ELSEIF(MSVC11)
+	ELSEIF(${MSVC_VERSION} EQUAL 1700)
 		SET(MSVC_VERSION_STRING vc110)
-	ELSEIF(MSVC12)
+	ELSEIF(${MSVC_VERSION} EQUAL 1800)
 		SET(MSVC_VERSION_STRING vc120)
-	ELSEIF(MSVC90)
+	ELSEIF(${MSVC_VERSION} EQUAL 1900)
+		SET(MSVC_VERSION_STRING vc140)
+	ELSEIF(${MSVC_VERSION} EQUAL 1500)
 		SET(MSVC_VERSION_STRING vc90)
-	ELSEIF(MSVC80)
+	ELSEIF(${MSVC_VERSION} EQUAL 1400)
 		SET(MSVC_VERSION_STRING vc80)
 	ENDIF()
 
@@ -108,6 +76,7 @@ ENDIF(TREAT_WARNINGS_AS_ERRORS)
 SET(CMAKE_MODULE_PATH "${FasTC_SOURCE_DIR}/CMakeModules" ${CMAKE_MODULE_PATH})
 FIND_PACKAGE(PVRTexLib)
 FIND_PACKAGE(BC7Export)
+FIND_PACKAGE(PNG)
 
 ######################################################################
 ##
@@ -173,7 +142,7 @@ INSTALL(
 ENABLE_TESTING()
 
 IF(MSVC)
-  SET(gtest_force_shared_crt TRUE)
+  SET(gtest_force_shared_crt TRUE CACHE BOOL "Used to properly select MSVC runtime libraries" FORCE)
 ENDIF(MSVC)
 
 ADD_SUBDIRECTORY(GTest)

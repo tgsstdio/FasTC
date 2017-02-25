@@ -1,56 +1,35 @@
-/* FasTC
- * Copyright (c) 2012 University of North Carolina at Chapel Hill. All rights reserved.
- *
- * Permission to use, copy, modify, and distribute this software and its documentation for educational, 
- * research, and non-profit purposes, without fee, and without a written agreement is hereby granted, 
- * provided that the above copyright notice, this paragraph, and the following four paragraphs appear 
- * in all copies.
- *
- * Permission to incorporate this software into commercial products may be obtained by contacting the 
- * authors or the Office of Technology Development at the University of North Carolina at Chapel Hill <otd@unc.edu>.
- *
- * This software program and documentation are copyrighted by the University of North Carolina at Chapel Hill. 
- * The software program and documentation are supplied "as is," without any accompanying services from the 
- * University of North Carolina at Chapel Hill or the authors. The University of North Carolina at Chapel Hill 
- * and the authors do not warrant that the operation of the program will be uninterrupted or error-free. The 
- * end-user understands that the program was developed for research purposes and is advised not to rely 
- * exclusively on the program for any reason.
- *
- * IN NO EVENT SHALL THE UNIVERSITY OF NORTH CAROLINA AT CHAPEL HILL OR THE AUTHORS BE LIABLE TO ANY PARTY FOR 
- * DIRECT, INDIRECT, SPECIAL, INCIDENTAL, OR CONSEQUENTIAL DAMAGES, INCLUDING LOST PROFITS, ARISING OUT OF THE 
- * USE OF THIS SOFTWARE AND ITS DOCUMENTATION, EVEN IF THE UNIVERSITY OF NORTH CAROLINA AT CHAPEL HILL OR THE 
- * AUTHORS HAVE BEEN ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- *
- * THE UNIVERSITY OF NORTH CAROLINA AT CHAPEL HILL AND THE AUTHORS SPECIFICALLY DISCLAIM ANY WARRANTIES, INCLUDING, 
- * BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE AND ANY 
- * STATUTORY WARRANTY OF NON-INFRINGEMENT. THE SOFTWARE PROVIDED HEREUNDER IS ON AN "AS IS" BASIS, AND THE UNIVERSITY 
- * OF NORTH CAROLINA AT CHAPEL HILL AND THE AUTHORS HAVE NO OBLIGATIONS TO PROVIDE MAINTENANCE, SUPPORT, UPDATES, 
- * ENHANCEMENTS, OR MODIFICATIONS.
- *
- * Please send all BUG REPORTS to <pavel@cs.unc.edu>.
- *
- * The authors may be contacted via:
- *
- * Pavel Krajcevski
- * Dept of Computer Science
- * 201 S Columbia St
- * Frederick P. Brooks, Jr. Computer Science Bldg
- * Chapel Hill, NC 27599-3175
- * USA
- * 
- * <http://gamma.cs.unc.edu/FasTC/>
- */
+// Copyright 2016 The University of North Carolina at Chapel Hill
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//    http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+// Please send all BUG REPORTS to <pavel@cs.unc.edu>.
+// <http://gamma.cs.unc.edu/FasTC/>
 
 #define _USE_MATH_DEFINES
 #include <cmath>
 
 #include "FasTC/Image.h"
 
+#define _USE_MATH_DEFINES
+#include <cmath>
+
 #include <algorithm>
 #include <cstdlib>
 #include <cstdio>
 #include <cstring>
 #include <cassert>
+
+#include <iostream>
 
 #include "FasTC/Color.h"
 #include "FasTC/Pixel.h"
@@ -64,6 +43,29 @@ static inline T sad( const T &a, const T &b ) {
 template<typename T>
 static inline T Clamp(const T &v, const T &a, const T &b) {
   return ::std::min(::std::max(a, v), b);
+}
+
+template<typename T> inline T PixelAbs(const T &a);
+template<> inline FasTC::IPixel PixelAbs<FasTC::IPixel>(const FasTC::IPixel &p) {
+  return FasTC::IPixel(fabs(p[0]));
+}
+
+template<> inline FasTC::Pixel PixelAbs<FasTC::Pixel>(const FasTC::Pixel &p) {
+  FasTC::Pixel result = p;
+  if (result.R() < 0) { result.R() = -result.R(); }
+  if (result.G() < 0) { result.G() = -result.G(); }
+  if (result.B() < 0) { result.B() = -result.B(); }
+  if (result.A() < 0) { result.A() = -result.A(); }
+  return result;
+}
+
+template<> inline FasTC::Color PixelAbs<FasTC::Color>(const FasTC::Color &p) {
+  FasTC::Color result = p;
+  if (result.R() < 0) { result.R() = -result.R(); }
+  if (result.G() < 0) { result.G() = -result.G(); }
+  if (result.B() < 0) { result.B() = -result.B(); }
+  if (result.A() < 0) { result.A() = -result.A(); }
+  return result;
 }
 
 // wtf
@@ -172,6 +174,36 @@ const PixelType & Image<PixelType>::operator()(uint32 i, uint32 j) const {
   assert(i < GetWidth());
   assert(j < GetHeight());
   return m_Pixels[j * GetWidth() + i];
+}
+
+template<typename PixelType>
+Image<PixelType> Image<PixelType>::Diff(Image<PixelType> *other, float mult) {
+  if (!other) {
+    std::cerr << "Image::Diff - ERROR: other == null" << std::endl;
+    assert(false);
+  }
+
+  if (GetWidth() != other->GetWidth() ||
+      GetHeight() != other->GetHeight()) {
+    std::cerr << "Image::Diff - ERROR: Images differ in dimension" << std::endl;
+    assert(false);
+    return *this;
+  }
+
+  this->ComputePixels();
+  other->ComputePixels();
+
+  Image<PixelType> result(GetWidth(), GetHeight());
+  for (uint32 j = 0; j < GetHeight(); ++j) {
+    for (uint32 i = 0; i < GetWidth(); ++i) {
+      result(i, j) = PixelAbs((*this)(i, j) - (*other)(i, j));
+      result(i, j) *= mult;
+      result(i, j).MakeOpaque();
+    }
+  }
+
+  // !SPEED! We do an unnecessary copy here...
+  return result;
 }
 
 template<typename PixelType>
@@ -478,7 +510,7 @@ double Image<PixelType>::ComputeEntropy() {
 template<typename PixelType>
 void Image<PixelType>::SetImageData(uint32 width, uint32 height, PixelType *data) {
   if(m_Pixels) {
-    delete m_Pixels;
+    delete [] m_Pixels;
   }
 
   if(!data) {
@@ -552,6 +584,9 @@ template class Image<Color>;
 void GenerateGaussianKernel(Image<IPixel> &out, uint32 size, float sigma) {
 
   assert(size % 2);
+  if (size == 0) {
+    return;
+  }
 
   out = Image<IPixel>(size, size);
   if(size == 1) {
@@ -680,7 +715,7 @@ static void IDCT(Image<IPixel> *img) {
           if (u == 0 && v == 0) {
             idct /= N;
           } else if (u == 0 || v == 0) {
-            idct *= sqrt(2) / N;
+            idct *= sqrtf(2) / N;
           } else {
             idct *= 2 / N;
           }
@@ -694,20 +729,20 @@ static void IDCT(Image<IPixel> *img) {
   *img = new_img;
 }
 
-static void RunDCTBlockFn(Image<IPixel> *img, int blockSize, DCTBlockFn fn) {
+static void RunDCTBlockFn(Image<IPixel> *img, uint32 blockSize, DCTBlockFn fn) {
   assert (NULL != fn);
   assert (0 < blockSize);
-  assert (static_cast<uint32>(blockSize) < img->GetWidth());
-  assert (static_cast<uint32>(blockSize) < img->GetHeight());
+  assert (blockSize < img->GetWidth());
+  assert (blockSize < img->GetHeight());
   
   Image<IPixel> block(blockSize, blockSize);
-  for (unsigned int j = 0; j < img->GetHeight(); j += blockSize) {
-    for (unsigned int i = 0; i < img->GetWidth(); i += blockSize) {
+  for (uint32 j = 0; j < img->GetHeight(); j += blockSize) {
+    for (uint32 i = 0; i < img->GetWidth(); i += blockSize) {
       // Populate block
-      for (int y = 0; y < blockSize; ++y) {
-        for (int x = 0; x < blockSize; ++x) {
-          IPixel xx = std::min(img->GetWidth() - 1, i + x);
-          IPixel yy = std::min(img->GetHeight() - 1, j + y);
+      for (uint32 y = 0; y < blockSize; ++y) {
+        for (uint32 x = 0; x < blockSize; ++x) {
+          uint32 xx = std::min(img->GetWidth() - 1, i + x);
+          uint32 yy = std::min(img->GetHeight() - 1, j + y);
           block(x, y) = (*img)(xx, yy);
         }
       }
@@ -716,8 +751,8 @@ static void RunDCTBlockFn(Image<IPixel> *img, int blockSize, DCTBlockFn fn) {
       fn(&block);
 
       // Put it back in the original image
-      for (int y = 0; y < blockSize; ++y) {
-        for (int x = 0; x < blockSize; ++x) {
+      for (uint32 y = 0; y < blockSize; ++y) {
+        for (uint32 x = 0; x < blockSize; ++x) {
           if (i + x >= img->GetWidth()) {
             continue;
           }
@@ -736,11 +771,11 @@ static void RunDCTBlockFn(Image<IPixel> *img, int blockSize, DCTBlockFn fn) {
   }
 }
 
-void DiscreteCosineXForm(Image<IPixel> *img, int blockSize) {
+void DiscreteCosineXForm(Image<IPixel> *img, uint32 blockSize) {
   RunDCTBlockFn(img, blockSize, DCT);
 }
 
-void InvDiscreteCosineXForm(Image<IPixel> *img, int blockSize) {
+void InvDiscreteCosineXForm(Image<IPixel> *img, uint32 blockSize) {
   RunDCTBlockFn(img, blockSize, IDCT);
 }
 

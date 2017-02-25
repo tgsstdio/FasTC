@@ -1,4 +1,4 @@
-FasTC [![Build Status](https://travis-ci.org/Mokosha/FasTC.png)](https://travis-ci.org/Mokosha/FasTC)
+FasTC [![Build Status](https://travis-ci.org/GammaUNC/FasTC.png)](https://travis-ci.org/GammaUNC/FasTC)
 =======
 
 A <b>Fas</b>t <b>T</b>exture <b>C</b>ompressor for a variety of formats. This compressor 
@@ -7,10 +7,37 @@ operating systems. It has been tested on Windows, OS X, and Ubuntu Linux.
 
 ---
 
+Licensing:
+--------------
+
+FasTC is licensed under the Apache 2.0 license. The full license can be found
+[online](http://www.apache.org/licenses/LICENSE-2.0). There are additional pieces
+of FasTC that have been incorporated and made available graciously by their authors.
+Each of the corresponding pieces has their license at the top of their respective
+source files. These pieces include:
+
+1. ETC1 compressor provided by Rich Geldreich, under a
+[ZLIB license](https://github.com/GammaUNC/FasTC/blob/master/ETCEncoder/src/rg_etc1.h#L56).
+
+2. DXT compressor provided by Sean Barrett, in the
+[public domain](https://github.com/nothings/stb/blob/master/stb_dxt.h#L20).
+
+3. Targa reader by Joshua S. English, under
+[their own](https://github.com/GammaUNC/FasTC/blob/master/IO/third_party/tga/targa.h#L6)
+license.
+
+4. GTest as a test framework, under
+[their own](https://github.com/GammaUNC/FasTC/blob/master/GTest/LICENSE)
+license
+
+Additionally, the original work for this repository was done as an
+[internship project](http://software.intel.com/en-us/vcsource/samples/fast-texture-compression)
+at Intel, released under a permissive MIT-like license.
+
 Requirements:
 --------------
 
-[CMake](http://www.cmake.org) (2.8.8) <br>
+[CMake](http://www.cmake.org) (3.1) <br>
 [libpng](http://www.libpng.org/pub/png/libpng.html) (1.5.13) <br>
 [zlib](http://www.zlib.net) (1.2.5)
 
@@ -22,7 +49,7 @@ create a separate build directory for compilation:
 
     mkdir FasTC
     cd FasTC
-    git clone git@github.com:Mokosha/FasTC.git src
+    git clone https://github.com/Mokosha/FasTC.git src
     mkdir build
     cd build
     cmake ../src -DCMAKE_BUILD_TYPE=Release
@@ -58,7 +85,9 @@ The quickest test will be to simply run the compressor on a PNG image:
     CLTool/tc path/to/image.png
     
 This will compress `image.png` into the BPTC (BC7) format using 50 steps of simulated annealing without
-SIMD optimization or multithreading.
+multithreading.
+
+Input file format supported: PNG, PVR, TGA, KTX, ASTC
 
 There are various run-time options available:
 
@@ -70,7 +99,7 @@ compression time and PSNR.
   * [DXT1](http://www.opengl.org/registry/specs/EXT/texture_compression_s3tc.txt) [2]
   * [DXT5](http://www.opengl.org/registry/specs/EXT/texture_compression_s3tc.txt) [2]
   * [PVRTC](http://web.onetel.net.uk/~simonnihal/assorted3d/fenney03texcomp.pdf)
-* `-d`: Specifies the decompressed output file.
+* `-d`: Specifies the output file. Format supported PNG, KTX
   * **Default**: `<filename>`-`<fmt>`.png
 * `-nd`: Suppress decompressed output.
 * `-t`: Specifies the number of threads to use for compression.
@@ -106,11 +135,9 @@ with atomic synchronization primitives, I would invoke the following command:
 
     CLTool/tc -n 100 -a path/to/image.png
 
-
 If I wanted to compress a texture into PVRTC, I would invoke the following command:
 
-    CLTool/tc -f PVRTC path/to/image.png
+    CLTool/tc -f PVRTC -d path/to/image.ktx path/to/image.png
 
 [1] Compression code courtesy of [Rich Geldreich](https://code.google.com/p/rg-etc1/) <br>
-[2] Compression code courtesy of [Intel](http://software.intel.com/en-us/vcsource/samples/fast-texture-compression).
-The idea implemented in this compressor was originally designed by [J. M. P. Van Waveren](http://www.gamedev.no/projects/MegatextureCompression/324337_324337.pdf)
+[2] Compression code courtesy of [Sean Barrett](https://github.com/nothings/stb/blob/master/stb_dxt.h).
