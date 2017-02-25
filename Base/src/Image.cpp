@@ -41,6 +41,9 @@
  * <http://gamma.cs.unc.edu/FasTC/>
  */
 
+#define _USE_MATH_DEFINES
+#include <cmath>
+
 #include "FasTC/Image.h"
 
 #include <algorithm>
@@ -48,9 +51,6 @@
 #include <cstdio>
 #include <cstring>
 #include <cassert>
-
-#define _USE_MATH_DEFINES
-#include <cmath>
 
 #include "FasTC/Color.h"
 #include "FasTC/Pixel.h"
